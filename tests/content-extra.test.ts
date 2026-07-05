@@ -211,6 +211,69 @@ Content.
     expect(store.getByTag("unknown")).toEqual([]);
   });
 
+  it("getBySlug reflects removeFile (slug index is kept in sync)", () => {
+    const filePath = path.join(tmpDir, "removable.md");
+    fs.writeFileSync(
+      filePath,
+      `---
+title: Removable
+date: "2026-01-01"
+slug: removable
+tags:
+  - temp
+---
+Body.
+`
+    );
+    const store = createPostStore(tmpDir);
+    store.loadAll();
+    expect(store.getBySlug("removable")).toBeDefined();
+    expect(store.getByTag("temp").length).toBe(1);
+
+    store.removeFile(filePath);
+    expect(store.getBySlug("removable")).toBeUndefined();
+    expect(store.getByTag("temp")).toEqual([]);
+  });
+
+  it("getBySlug reflects a reload that changes slug and tags", () => {
+    const filePath = path.join(tmpDir, "mutable.md");
+    fs.writeFileSync(
+      filePath,
+      `---
+title: Mutable
+date: "2026-01-01"
+slug: old-slug
+tags:
+  - old
+---
+Body.
+`
+    );
+    const store = createPostStore(tmpDir);
+    store.loadFile(filePath);
+    expect(store.getBySlug("old-slug")).toBeDefined();
+    expect(store.getByTag("old").length).toBe(1);
+
+    // Rewrite the file with a new slug and tag, then reload the same path.
+    fs.writeFileSync(
+      filePath,
+      `---
+title: Mutable
+date: "2026-01-01"
+slug: new-slug
+tags:
+  - new
+---
+Body.
+`
+    );
+    store.loadFile(filePath);
+    expect(store.getBySlug("old-slug")).toBeUndefined();
+    expect(store.getBySlug("new-slug")).toBeDefined();
+    expect(store.getByTag("old")).toEqual([]);
+    expect(store.getByTag("new").length).toBe(1);
+  });
+
   it("handles frontmatter-only file with no content body", () => {
     const filePath = path.join(tmpDir, "empty-body.md");
     fs.writeFileSync(
