@@ -42,6 +42,22 @@ describe("renderMarkdown - additional cases", () => {
     expect(html).toContain("<em>italic</em>");
     expect(html).toContain("<strong>bold</strong>");
   });
+
+  it("strips <script> tags from the body (stored XSS)", () => {
+    const html = renderMarkdown('Hello <script>alert("xss")</script> world');
+    expect(html).not.toContain("<script");
+    expect(html).not.toContain("alert(");
+  });
+
+  it("strips inline event handlers from the body", () => {
+    const html = renderMarkdown('<img src="x" onerror="alert(1)">');
+    expect(html).not.toMatch(/onerror/i);
+  });
+
+  it("neutralizes javascript: URLs", () => {
+    const html = renderMarkdown('<a href="javascript:alert(1)">click</a>');
+    expect(html).not.toMatch(/javascript:/i);
+  });
 });
 
 describe("renderPost - edge cases", () => {

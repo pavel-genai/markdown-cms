@@ -2,7 +2,53 @@ import { marked } from "marked";
 import type { Post } from "./content.js";
 
 export function renderMarkdown(markdown: string): string {
-  return marked.parse(markdown, { async: false }) as string;
+  const html = marked.parse(markdown, { async: false }) as string;
+  return sanitizeHtml(html);
+}
+
+// Tags that must never appear in rendered output because they can execute
+// script or load active content.
+const DANGEROUS_TAGS = [
+  "script",
+  "style",
+  "iframe",
+  "object",
+  "embed",
+  "form",
+  "link",
+  "meta",
+  "base",
+];
+
+/**
+ * Neutralize the most common stored-XSS vectors in `marked` output, which
+ * passes raw inline HTML through untouched. This is a defense-in-depth pass:
+ * it strips dangerous elements, inline event-handler attributes, and
+ * `javascript:` URLs so that a malicious Markdown body cannot execute script
+ * when served from a post page.
+ */
+export function sanitizeHtml(html: string): string {
+  let out = html;
+
+  // Remove dangerous elements together with their content.
+  for (const tag of DANGEROUS_TAGS) {
+    const withBody = new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*?<\\/${tag}>`, "gi");
+    out = out.replace(withBody, "");
+    // Also drop any stray/self-closing or unclosed variants of the tag.
+    const standalone = new RegExp(`<\\/?${tag}\\b[^>]*>`, "gi");
+    out = out.replace(standalone, "");
+  }
+
+  // Strip inline event-handler attributes (onclick, onerror, onload, ...).
+  out = out.replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+
+  // Neutralize javascript:/vbscript:/data: URLs in href/src attributes.
+  out = out.replace(
+    /\b(href|src)\s*=\s*("|')?\s*(javascript|vbscript|data):[^"'\s>]*("|')?/gi,
+    '$1="#"'
+  );
+
+  return out;
 }
 
 export function renderPost(post: Post): string {
