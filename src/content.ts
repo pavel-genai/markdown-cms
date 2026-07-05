@@ -24,6 +24,22 @@ export interface PostStore {
 export function createPostStore(contentDir: string): PostStore {
   const posts = new Map<string, Post>();
 
+  function normalizeDate(raw: unknown, filePath: string): string {
+    if (raw == null) {
+      return new Date().toISOString();
+    }
+    const asString = String(raw);
+    const parsed = new Date(asString);
+    if (Number.isNaN(parsed.getTime())) {
+      console.warn(
+        `[content] invalid date ${JSON.stringify(asString)} in ${filePath}; ` +
+          `falling back to current time`
+      );
+      return new Date().toISOString();
+    }
+    return asString;
+  }
+
   function loadFile(filePath: string): Post | null {
     try {
       const raw = fs.readFileSync(filePath, "utf-8");
@@ -31,7 +47,7 @@ export function createPostStore(contentDir: string): PostStore {
 
       const post: Post = {
         title: (data.title as string) ?? path.basename(filePath, ".md"),
-        date: (data.date as string) ?? new Date().toISOString(),
+        date: normalizeDate(data.date, filePath),
         tags: Array.isArray(data.tags) ? (data.tags as string[]) : [],
         slug:
           (data.slug as string) ??
@@ -39,6 +55,18 @@ export function createPostStore(contentDir: string): PostStore {
         content,
         filePath,
       };
+
+      // Warn on duplicate slugs: two files resolving to the same slug collide
+      // silently in getBySlug, and which one wins depends on Map order.
+      for (const existing of posts.values()) {
+        if (existing.filePath !== filePath && existing.slug === post.slug) {
+          console.warn(
+            `[content] duplicate slug ${JSON.stringify(post.slug)}: ` +
+              `${existing.filePath} and ${filePath}`
+          );
+          break;
+        }
+      }
 
       posts.set(filePath, post);
       return post;
@@ -62,9 +90,13 @@ export function createPostStore(contentDir: string): PostStore {
   }
 
   function getAll(): Post[] {
-    return Array.from(posts.values()).sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
+    // NaN-safe sort: treat unparseable dates as epoch 0 so a bad date can
+    // never poison the ordering with NaN comparisons.
+    const time = (d: string): number => {
+      const t = new Date(d).getTime();
+      return Number.isNaN(t) ? 0 : t;
+    };
+    return Array.from(posts.values()).sort((a, b) => time(b.date) - time(a.date));
   }
 
   function getBySlug(slug: string): Post | undefined {

@@ -229,6 +229,88 @@ tags: []
     expect(post!.content.trim()).toBe("");
   });
 
+  it("warns when two files resolve to the same slug", () => {
+    const warnings: string[] = [];
+    const original = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.join(" "));
+    };
+    try {
+      const fileA = path.join(tmpDir, "a.md");
+      const fileB = path.join(tmpDir, "b.md");
+      const body = `---
+title: Post
+date: "2026-01-01"
+slug: shared
+tags: []
+---
+
+Body.
+`;
+      fs.writeFileSync(fileA, body);
+      fs.writeFileSync(fileB, body);
+      const store = createPostStore(tmpDir);
+      store.loadAll();
+      expect(warnings.some((w) => w.includes("duplicate slug"))).toBe(true);
+    } finally {
+      console.warn = original;
+    }
+  });
+
+  it("falls back to a valid date when frontmatter date is unparseable", () => {
+    const filePath = path.join(tmpDir, "bad-date.md");
+    fs.writeFileSync(
+      filePath,
+      `---
+title: Bad Date
+date: "not a real date"
+slug: bad-date
+tags: []
+---
+
+Body.
+`
+    );
+    const store = createPostStore(tmpDir);
+    const post = store.loadFile(filePath);
+    expect(post).not.toBeNull();
+    expect(Number.isNaN(new Date(post!.date).getTime())).toBe(false);
+  });
+
+  it("keeps getAll ordering NaN-safe when a post has an invalid date", () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "good.md"),
+      `---
+title: Good
+date: "2026-05-01"
+slug: good
+tags: []
+---
+Body.
+`
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, "bad.md"),
+      `---
+title: Bad
+date: "garbage-date"
+slug: bad
+tags: []
+---
+Body.
+`
+    );
+    const store = createPostStore(tmpDir);
+    store.loadAll();
+    const all = store.getAll();
+    expect(all.length).toBe(2);
+    // Every returned post has a parseable date (the invalid one fell back),
+    // so no NaN can corrupt the sort order.
+    for (const p of all) {
+      expect(Number.isNaN(new Date(p.date).getTime())).toBe(false);
+    }
+  });
+
   it("handles completely empty file", () => {
     const filePath = path.join(tmpDir, "empty.md");
     fs.writeFileSync(filePath, "");
