@@ -148,6 +148,16 @@ describe("Express App", () => {
     });
   });
 
+  describe("GET /health", () => {
+    it("returns JSON health status", async () => {
+      const app = createApp(store, searchIndex);
+      const res = await request(app).get("/health");
+      expect(res.status).toBe(200);
+      expect(res.type).toBe("application/json");
+      expect(res.text).toBe('{"status":"ok","service":"markdown-cms"}');
+    });
+  });
+
   describe("GET /tags/:tag", () => {
     it("returns posts filtered by tag", async () => {
       const app = createApp(store, searchIndex);

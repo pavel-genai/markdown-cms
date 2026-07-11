@@ -42,6 +42,11 @@ export function createApp(store: PostStore, searchIndex: SearchIndex) {
     res.type("html").send(renderPost(post));
   });
 
+  // Health check
+  app.get("/health", (_req, res) => {
+    res.json({ status: "ok", service: "markdown-cms" });
+  });
+
   // Root redirect
   app.get("/", (_req, res) => {
     res.redirect("/posts");
